@@ -42,11 +42,16 @@ jobs:
           - runner: macos-14
             arch: arm64
             extras: "mlx,cpu,ui"
-          # Intel Macs fall back to CTranslate2 on the CPU.
-          - runner: macos-13
+          # Intel Macs fall back to CTranslate2 on the CPU. macos-13 was
+          # retired, so this is the current Intel runner label. Marked
+          # non-blocking: an Intel problem must never hold up the Apple
+          # Silicon release.
+          - runner: macos-15-intel
             arch: x86_64
             extras: "cpu,ui"
+            optional: true
     runs-on: ${{ matrix.runner }}
+    continue-on-error: ${{ matrix.optional || false }}
     steps:
       - uses: actions/checkout@v4
 
@@ -107,7 +112,9 @@ jobs:
 
   release:
     needs: build
-    if: startsWith(github.ref, 'refs/tags/v') || inputs.release
+    if: >-
+      always() &&
+      (startsWith(github.ref, 'refs/tags/v') || inputs.release)
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -115,6 +122,16 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           path: artifacts
+      - name: Show what will be published
+        run: ls -lhR artifacts
+
+      # always() lets this job run when the optional Intel leg fails. It must
+      # not publish an empty release when the real build failed instead.
+      - name: Require at least one disk image
+        run: |
+          count="$(find artifacts -name '*.dmg' | wc -l | tr -d ' ')"
+          echo "found $count disk image(s)"
+          test "$count" -gt 0
       - uses: softprops/action-gh-release@v2
         with:
           files: artifacts/**/*.dmg
