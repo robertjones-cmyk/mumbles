@@ -33,7 +33,16 @@ your menu bar. There is no Dock icon and no window — it is a menu bar app.
 > Open.** If macOS still refuses:
 > `xattr -dr com.apple.quarantine /Applications/mumbles.app`. Once only.
 
-### Or install from source
+### Or install with one command
+
+No disk image, no Gatekeeper prompt, no right-click dance:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/robertjones-cmyk/mumbles/main/install.sh | bash
+```
+
+This is the simplest route, and it also gives you the `mumbles` command line
+alongside the menu bar app. From a clone it is the same script:
 
 ```bash
 git clone https://github.com/robertjones-cmyk/mumbles.git

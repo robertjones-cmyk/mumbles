@@ -2,12 +2,36 @@
 # Install mumbles into its own virtualenv and put `mumbles` on your PATH.
 set -euo pipefail
 
-REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 VENV="${MUMBLES_VENV:-$HOME/.local/share/mumbles/venv}"
 BIN_DIR="${MUMBLES_BIN_DIR:-$HOME/.local/bin}"
+SRC_DIR="${MUMBLES_SRC:-$HOME/.local/share/mumbles/src}"
+REPO_URL="${MUMBLES_REPO:-https://github.com/robertjones-cmyk/mumbles.git}"
+REPO_REF="${MUMBLES_REF:-claude/vibrant-einstein-m2e6xf}"
 
 say() { printf '\033[1m==>\033[0m %s\n' "$1"; }
 warn() { printf '\033[33m==>\033[0m %s\n' "$1"; }
+
+# Works both ways: run from a checkout, or piped straight from curl, where
+# BASH_SOURCE points at nothing and the source has to be fetched first.
+_here="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" 2>/dev/null && pwd || true)"
+if [[ -n "$_here" && -f "$_here/pyproject.toml" ]]; then
+  REPO_DIR="$_here"
+else
+  if ! command -v git >/dev/null 2>&1; then
+    echo "git is required to fetch mumbles. Install Xcode command line tools:" >&2
+    echo "  xcode-select --install" >&2
+    exit 1
+  fi
+  say "fetching mumbles into $SRC_DIR"
+  if [[ -d "$SRC_DIR/.git" ]]; then
+    git -C "$SRC_DIR" fetch --depth 1 origin "$REPO_REF"
+    git -C "$SRC_DIR" checkout -q FETCH_HEAD
+  else
+    mkdir -p "$(dirname "$SRC_DIR")"
+    git clone --depth 1 --branch "$REPO_REF" "$REPO_URL" "$SRC_DIR"
+  fi
+  REPO_DIR="$SRC_DIR"
+fi
 
 if [[ "$(uname -s)" != "Darwin" ]]; then
   warn "mumbles targets macOS. Installing anyway, but paste and sounds won't work."
