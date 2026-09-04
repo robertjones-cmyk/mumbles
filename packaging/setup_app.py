@@ -9,12 +9,18 @@ Build it with:  python packaging/setup_app.py py2app
 
 from __future__ import annotations
 
+import os
 import sys
 from pathlib import Path
 
 from setuptools import setup
 
-ROOT = Path(__file__).resolve().parent.parent
+# py2app refuses to run against a Distribution carrying install_requires, and
+# setuptools fills that in from any pyproject.toml in the working directory.
+# make_dmg.sh therefore copies this file to a staging directory with no
+# pyproject.toml in it and points us back at the real tree from here.
+ROOT = Path(os.environ.get("MUMBLES_SOURCE_ROOT")
+            or Path(__file__).resolve().parent.parent).resolve()
 sys.path.insert(0, str(ROOT))
 
 from mumbles import __version__  # noqa: E402

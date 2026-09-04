@@ -31,9 +31,30 @@ done
 iconutil -c icns build/mumbles.iconset -o packaging/mumbles.icns
 say "icon: packaging/mumbles.icns"
 
+if ! PYTHONPATH="$ROOT" python3 -c "import mumbles" 2>/dev/null; then
+  echo "cannot import mumbles; run 'pip install .' in $ROOT first" >&2
+  exit 1
+fi
+
 say "building mumbles.app (this takes a few minutes)"
-rm -rf build/bdist.macosx* dist/mumbles.app
-python3 packaging/setup_app.py py2app
+# Build from a staging directory. setuptools reads pyproject.toml from the
+# working directory and turns [project].dependencies into install_requires,
+# which py2app then refuses to build against.
+STAGE_BUILD="build/appbuild"
+rm -rf "$STAGE_BUILD" dist/mumbles.app
+mkdir -p "$STAGE_BUILD"
+cp packaging/setup_app.py packaging/app_main.py "$STAGE_BUILD/"
+
+(
+  cd "$STAGE_BUILD"
+  MUMBLES_SOURCE_ROOT="$ROOT" PYTHONPATH="$ROOT" python3 setup_app.py py2app
+)
+
+mkdir -p dist
+if [[ -d "$STAGE_BUILD/dist/mumbles.app" ]]; then
+  rm -rf dist/mumbles.app
+  cp -R "$STAGE_BUILD/dist/mumbles.app" dist/
+fi
 
 if [[ ! -d "dist/mumbles.app" ]]; then
   echo "py2app did not produce dist/mumbles.app" >&2
