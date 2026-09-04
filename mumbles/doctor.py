@@ -120,6 +120,34 @@ def _check_config() -> Check:
     return Check("config", True, str(paths.config_file()))
 
 
+def _check_accessibility_api() -> Check:
+    from . import permissions
+
+    if not permissions.is_mac():
+        return Check("hotkey permission", True, "not applicable")
+    if permissions.accessibility_trusted():
+        return Check("hotkey permission", True, "Accessibility granted")
+    return Check(
+        "hotkey permission", False, "Accessibility not granted",
+        "System Settings > Privacy & Security > Accessibility (and Input "
+        "Monitoring): add mumbles and switch it on. Without this the hotkey "
+        "never fires.",
+    )
+
+
+def _check_translocation() -> Check:
+    from . import permissions
+
+    if not permissions.is_translocated():
+        return Check("app location", True, "not translocated")
+    return Check(
+        "app location", False, "running from a quarantined copy",
+        "macOS relaunches a quarantined app from a new random path each time, "
+        "so granted permissions never stick. Run:\n      "
+        + permissions.quarantine_fix_command(),
+    )
+
+
 def run_checks() -> List[Check]:
     return [
         _check_platform(),
@@ -133,4 +161,6 @@ def run_checks() -> List[Check]:
         _check_engines(),
         _check_clipboard(),
         _check_accessibility(),
+        _check_accessibility_api(),
+        _check_translocation(),
     ]

@@ -227,3 +227,76 @@ def test_status_line_matches_the_activation_style(fake_rumps, sandbox):
 
     assert "Hold" in MenuBarApp(Config(activation="hold")).status_item.title
     assert "Tap" in MenuBarApp(Config(activation="toggle")).status_item.title
+
+
+# --- macOS permission surfacing ---------------------------------------------
+#
+# The app used to start, show a mic icon, and then silently do nothing when the
+# hotkey was pressed, because Accessibility had not been granted. pynput's only
+# complaint went to a stderr no user ever sees.
+
+
+@pytest.fixture
+def blocked(monkeypatch):
+    from mumbles import permissions
+
+    problem = ("Accessibility permission is missing", "how to fix it",
+               permissions.ACCESSIBILITY_PANE)
+    monkeypatch.setattr(permissions, "problems", lambda: [problem])
+    return problem
+
+
+def test_a_blocked_hotkey_changes_the_menu_bar_icon(fake_rumps, sandbox, blocked):
+    from mumbles.menubar import BLOCKED_GLYPH, MenuBarApp
+
+    bar = MenuBarApp(Config())
+    bar._tick()
+    assert bar.app.title == BLOCKED_GLYPH
+    assert BLOCKED_GLYPH in bar.status_item.title
+
+
+def test_a_blocked_hotkey_notifies_once(fake_rumps, sandbox, blocked):
+    from mumbles.menubar import MenuBarApp
+
+    bar = MenuBarApp(Config())
+    for _ in range(60):
+        bar._tick()
+    assert len(fake_rumps.notifications) == 1
+    assert "Accessibility" in fake_rumps.notifications[0][2]
+
+
+def test_granting_the_permission_clears_the_warning(fake_rumps, sandbox, blocked,
+                                                    monkeypatch):
+    from mumbles import permissions
+    from mumbles.menubar import GLYPHS, MenuBarApp
+
+    bar = MenuBarApp(Config())
+    bar._tick()
+    assert bar.app.title != GLYPHS[IDLE]
+
+    monkeypatch.setattr(permissions, "problems", lambda: [])
+    for _ in range(21):                     # let the periodic re-check run
+        bar._tick()
+    assert bar.app.title == GLYPHS[IDLE]
+    assert "Hold" in bar.status_item.title
+
+
+def test_recording_still_shows_the_meter_even_if_something_is_blocked(
+        fake_rumps, sandbox, blocked):
+    from mumbles.menubar import MenuBarApp
+
+    bar = MenuBarApp(Config())
+    bar._on_state(RECORDING)
+    bar._tick()
+    assert bar.app.title.startswith("🔴 ")
+
+
+def test_no_warning_when_nothing_is_blocked(fake_rumps, sandbox, monkeypatch):
+    from mumbles import permissions
+    from mumbles.menubar import GLYPHS, MenuBarApp
+
+    monkeypatch.setattr(permissions, "problems", lambda: [])
+    bar = MenuBarApp(Config())
+    bar._tick()
+    assert bar.app.title == GLYPHS[IDLE]
+    assert fake_rumps.notifications == []

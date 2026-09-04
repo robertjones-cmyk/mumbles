@@ -65,12 +65,27 @@ def main() -> int:
     return 0
 
 
+def _version() -> str:
+    try:
+        from mumbles import __version__
+
+        return __version__
+    except Exception:
+        return "unknown"
+
+
 def _report(message: str) -> None:
     from mumbles import paths
 
     try:
         paths.ensure_dirs()
+        import datetime
+
+        stamp = datetime.datetime.now().isoformat(timespec="seconds")
         with paths.log_file().open("a") as handle:
+            # Undated tracebacks make it impossible to tell a live crash from
+            # one left by a version installed days ago.
+            handle.write(f"----- {stamp} mumbles {_version()} -----\n")
             handle.write(message + "\n")
     except Exception:
         pass

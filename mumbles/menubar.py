@@ -17,11 +17,18 @@ import subprocess
 from collections import deque
 
 from . import config as config_module
-from . import inject, paths
+from . import inject, paths, permissions
 from .app import IDLE, RECORDING, TRANSCRIBING, DictationApp
 from .meter import LevelMeter
 
 GLYPHS = {IDLE: "🎙", RECORDING: "🔴", TRANSCRIBING: "✍️"}
+
+# Shown instead of the mic when the hotkey cannot possibly work.
+BLOCKED_GLYPH = "⚠️"
+
+# Permissions are re-checked every this many frames (about two seconds), so
+# granting one is reflected without restarting the app.
+PERMISSION_CHECK_FRAMES = 20
 
 # 10 frames a second: smooth enough to read as live, cheap enough to ignore.
 FRAME_INTERVAL = 0.1
@@ -64,6 +71,9 @@ class MenuBarApp:
         self._notifications = deque(maxlen=8)
         self._drawn_title = None
         self._drawn_toggle = None
+        self._problems = permissions.problems()
+        self._frames = 0
+        self._warned = False
 
         self.dictation = DictationApp(
             cfg,
@@ -79,6 +89,7 @@ class MenuBarApp:
         rumps = self.rumps
         self.toggle_item = rumps.MenuItem("Start dictation", callback=self._toggle)
         self.status_item = rumps.MenuItem(self._idle_hint(), callback=None)
+        self.problem_item = rumps.MenuItem("", callback=self._show_problems)
 
         self.mode_menu = rumps.MenuItem("Mode")
         self._rebuild_modes()
@@ -87,6 +98,7 @@ class MenuBarApp:
         self.history_menu.add(rumps.MenuItem("(nothing yet)", callback=None))
 
         self.app.menu = [
+            self.problem_item,
             self.status_item,
             None,
             self.toggle_item,
@@ -103,8 +115,24 @@ class MenuBarApp:
         ]
 
     def _idle_hint(self) -> str:
+        if self._problems:
+            return f"{BLOCKED_GLYPH} {self._problems[0][0]} - click for how to fix"
         verb = "Hold" if self.cfg.activation == "hold" else "Tap"
         return f"{verb} {self.dictation.hotkey_label} to talk"
+
+    def _show_problems(self, _sender=None) -> None:
+        """Spell out what macOS is blocking, and offer to open the pane."""
+        if not self._problems:
+            return
+        label, explanation, pane = self._problems[0]
+        self.rumps.alert(
+            title=label,
+            message=explanation,
+            ok="Open System Settings" if pane else "OK",
+            cancel="Later" if pane else None,
+        )
+        if pane:
+            permissions.open_settings(pane)
 
     def _rebuild_modes(self) -> None:
         rumps = self.rumps
@@ -135,12 +163,18 @@ class MenuBarApp:
     # --- the main-thread pump -------------------------------------------
     def title_for(self, state: str) -> str:
         """What the bar should read right now. Pure, so it can be tested."""
+        if state == IDLE and self._problems:
+            return BLOCKED_GLYPH
         if state == RECORDING:
             return f"{GLYPHS[RECORDING]} {self.meter.render()}"
         return GLYPHS.get(state, GLYPHS[IDLE])
 
     def _tick(self, _timer=None) -> None:
         state = self._state
+
+        self._frames += 1
+        if self._frames % PERMISSION_CHECK_FRAMES == 0 or self._frames == 1:
+            self._refresh_problems()
 
         if state == RECORDING:
             self.meter.sample()
@@ -166,6 +200,25 @@ class MenuBarApp:
             self.rumps.notification(
                 "mumbles", "Something went wrong", self._notifications.popleft()
             )
+
+    def _refresh_problems(self) -> None:
+        """Re-check permissions so granting one clears the warning live."""
+        current = permissions.problems()
+        if current == self._problems and self._warned:
+            return
+        self._problems = current
+        self.status_item.title = self._idle_hint()
+        self.problem_item.title = (
+            f"{BLOCKED_GLYPH} {current[0][0]}…" if current else ""
+        )
+        self.problem_item.hidden = not current
+        if current and not self._warned:
+            self._warned = True
+            self._notifications.append(
+                f"{current[0][0]}. Click the menu bar icon for how to fix it."
+            )
+        elif not current:
+            self._warned = False
 
     # --- menu contents ---------------------------------------------------
     def _refresh_history(self) -> None:
