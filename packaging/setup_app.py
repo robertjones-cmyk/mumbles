@@ -11,6 +11,8 @@ from __future__ import annotations
 
 import os
 import sys
+import threading
+import traceback
 from pathlib import Path
 
 from setuptools import setup
@@ -91,9 +93,44 @@ OPTIONS = {
 if OPTIONS["py2app"]["iconfile"] is None:
     del OPTIONS["py2app"]["iconfile"]
 
-setup(
-    name="mumbles",
-    version=__version__,
-    app=[str(ROOT / "packaging" / "app_main.py")],
-    options=OPTIONS,
-)
+def _build() -> None:
+    setup(
+        name="mumbles",
+        version=__version__,
+        app=[str(ROOT / "packaging" / "app_main.py")],
+        options=OPTIONS,
+    )
+
+
+def main() -> int:
+    """Run py2app with room to recurse.
+
+    py2app walks every dependency's AST to build its module graph, and the
+    scientific stack is deep enough to exhaust the default 1000-frame limit.
+    Raising the limit alone just trades a RecursionError for a segfault when
+    the C stack runs out, so the build also gets a thread with a large stack
+    to run on.
+    """
+    sys.setrecursionlimit(15000)
+    threading.stack_size(64 * 1024 * 1024)
+
+    failure: list = []
+
+    def target() -> None:
+        try:
+            _build()
+        except SystemExit as exc:               # distutils signals errors this way
+            if exc.code not in (0, None):
+                failure.append(exc)
+        except BaseException as exc:
+            traceback.print_exc()
+            failure.append(exc)
+
+    thread = threading.Thread(target=target)
+    thread.start()
+    thread.join()
+    return 1 if failure else 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
