@@ -81,7 +81,9 @@ jobs:
 
       - name: Prove the bundled interpreter can import everything
         run: |
-          MUMBLES_SELFTEST=1 dist/mumbles.app/Contents/MacOS/mumbles
+          BIN="$(find dist/mumbles.app/Contents/MacOS -maxdepth 1 -type f -perm -u+x -print -quit)"
+          echo "bundle executable: $BIN"
+          MUMBLES_SELFTEST=1 "$BIN"
 
       - uses: actions/upload-artifact@v4
         with:

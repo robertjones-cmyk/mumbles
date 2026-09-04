@@ -63,7 +63,6 @@ PLIST = {
     "CFBundleIdentifier": "com.mumbles.app",
     "CFBundleVersion": __version__,
     "CFBundleShortVersionString": __version__,
-    "CFBundleExecutable": "mumbles",
     "LSMinimumSystemVersion": "12.0",
     "NSHighResolutionCapable": True,
     # A menu bar agent: no Dock icon, no app switcher entry.
@@ -121,6 +120,9 @@ def main() -> int:
             _build()
         except SystemExit as exc:               # distutils signals errors this way
             if exc.code not in (0, None):
+                # The message is carried as the exit code; print it or the
+                # build fails with no explanation at all.
+                print(f"py2app failed: {exc.code}", file=sys.stderr)
                 failure.append(exc)
         except BaseException as exc:
             traceback.print_exc()

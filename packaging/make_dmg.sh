@@ -50,16 +50,20 @@ cp packaging/setup_app.py packaging/app_main.py "$STAGE_BUILD/"
   MUMBLES_SOURCE_ROOT="$ROOT" PYTHONPATH="$ROOT" python3 setup_app.py py2app
 )
 
-mkdir -p dist
-if [[ -d "$STAGE_BUILD/dist/mumbles.app" ]]; then
-  rm -rf dist/mumbles.app
-  cp -R "$STAGE_BUILD/dist/mumbles.app" dist/
-fi
-
-if [[ ! -d "dist/mumbles.app" ]]; then
-  echo "py2app did not produce dist/mumbles.app" >&2
+# py2app names the bundle after the entry script, so find whatever it built
+# rather than assuming. Renaming the directory is safe: a bundle's identity
+# comes from Info.plist, not from its folder name.
+BUILT="$(find "$STAGE_BUILD/dist" -maxdepth 1 -name '*.app' -print -quit)"
+if [[ -z "$BUILT" ]]; then
+  echo "py2app did not produce an .app bundle" >&2
+  ls -la "$STAGE_BUILD/dist" 2>/dev/null || true
   exit 1
 fi
+say "py2app built $(basename "$BUILT")"
+
+mkdir -p dist
+rm -rf dist/mumbles.app
+cp -R "$BUILT" dist/mumbles.app
 
 # py2app writes a bundle whose signature is stale by the time we finish
 # touching it. An ad-hoc signature is what lets macOS run it at all; it is
