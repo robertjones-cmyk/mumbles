@@ -1,18 +1,30 @@
 """macOS menu bar UI (requires `rumps`).
 
-The bar item is the whole interface: a glyph shows state at a glance, and
-the menu holds mode switching, recent transcripts and preferences.
+The bar item is the whole interface: a live level meter shows the mic is
+actually hearing you, and the menu holds mode switching, recent transcripts
+and preferences.
+
+Threading note: recording is driven from the hotkey listener's thread and
+audio levels arrive on PortAudio's thread, but AppKit must only be touched
+from the main thread. So background threads never draw. They set plain
+attributes, and a 10 Hz `rumps.Timer` on the main thread reconciles the UI
+against them.
 """
 
 from __future__ import annotations
 
 import subprocess
-import threading
+from collections import deque
+
 from . import config as config_module
 from . import inject, paths
 from .app import IDLE, RECORDING, TRANSCRIBING, DictationApp
+from .meter import LevelMeter
 
 GLYPHS = {IDLE: "🎙", RECORDING: "🔴", TRANSCRIBING: "✍️"}
+
+# 10 frames a second: smooth enough to read as live, cheap enough to ignore.
+FRAME_INTERVAL = 0.1
 
 
 def _require_rumps():
@@ -31,21 +43,30 @@ class MenuBarApp:
         self.rumps = _require_rumps()
         self.cfg = cfg
         self.app = self.rumps.App("mumbles", title=GLYPHS[IDLE], quit_button=None)
+        self.meter = LevelMeter()
+
+        # Written by background threads, read by the timer. Plain assignment
+        # and deque appends are safe; nothing here needs a lock.
+        self._state = IDLE
+        self._history_dirty = True
+        self._notifications = deque(maxlen=8)
+        self._drawn_title = None
+        self._drawn_toggle = None
+
         self.dictation = DictationApp(
             cfg,
             on_state=self._on_state,
             on_result=self._on_result,
             on_error=self._on_error,
+            on_level=self.meter.push,
         )
         self._build_menu()
 
-    # ------------------------------------------------------------------
+    # --- menu construction ---------------------------------------------
     def _build_menu(self) -> None:
         rumps = self.rumps
         self.toggle_item = rumps.MenuItem("Start dictation", callback=self._toggle)
-        self.status_item = rumps.MenuItem(
-            f"Hold {self.dictation.hotkey_label} to talk", callback=None
-        )
+        self.status_item = rumps.MenuItem(self._idle_hint(), callback=None)
 
         self.mode_menu = rumps.MenuItem("Mode")
         self._rebuild_modes()
@@ -69,35 +90,72 @@ class MenuBarApp:
             rumps.MenuItem("Quit", callback=self._quit),
         ]
 
+    def _idle_hint(self) -> str:
+        verb = "Hold" if self.cfg.activation == "hold" else "Tap"
+        return f"{verb} {self.dictation.hotkey_label} to talk"
+
     def _rebuild_modes(self) -> None:
         rumps = self.rumps
         self.mode_menu.clear()
         for name, mode in sorted(self.cfg.resolved_modes().items()):
             label = f"{'✓ ' if name == self.cfg.active_mode else '   '}{name}"
-            item = rumps.MenuItem(label, callback=self._make_mode_callback(name))
-            self.mode_menu.add(item)
+            self.mode_menu.add(
+                rumps.MenuItem(label, callback=self._make_mode_callback(name))
+            )
 
     def _make_mode_callback(self, name: str):
         def callback(_sender):
             self.dictation.set_mode(name)
             self._rebuild_modes()
-            self.rumps.notification("mumbles", "Mode changed", name)
 
         return callback
 
-    # ------------------------------------------------------------------
+    # --- callbacks from background threads ------------------------------
     def _on_state(self, state: str) -> None:
-        self.app.title = GLYPHS.get(state, GLYPHS[IDLE])
-        self.toggle_item.title = (
-            "Stop dictation" if state == RECORDING else "Start dictation"
-        )
+        self._state = state
 
     def _on_result(self, text: str, transcript) -> None:
-        self._refresh_history()
+        self._history_dirty = True
 
     def _on_error(self, exc: Exception) -> None:
-        self.rumps.notification("mumbles", "Something went wrong", str(exc)[:200])
+        self._notifications.append(str(exc)[:200])
 
+    # --- the main-thread pump -------------------------------------------
+    def title_for(self, state: str) -> str:
+        """What the bar should read right now. Pure, so it can be tested."""
+        if state == RECORDING:
+            return f"{GLYPHS[RECORDING]} {self.meter.render()}"
+        return GLYPHS.get(state, GLYPHS[IDLE])
+
+    def _tick(self, _timer=None) -> None:
+        state = self._state
+
+        if state == RECORDING:
+            self.meter.sample()
+        elif self.meter.level:
+            # Let the bar fall back to rest rather than snapping to empty.
+            self.meter.sample()
+
+        title = self.title_for(state)
+        if title != self._drawn_title:
+            self.app.title = title
+            self._drawn_title = title
+
+        toggle = "Stop dictation" if state == RECORDING else "Start dictation"
+        if toggle != self._drawn_toggle:
+            self.toggle_item.title = toggle
+            self._drawn_toggle = toggle
+
+        if self._history_dirty:
+            self._history_dirty = False
+            self._refresh_history()
+
+        while self._notifications:
+            self.rumps.notification(
+                "mumbles", "Something went wrong", self._notifications.popleft()
+            )
+
+    # --- menu contents ---------------------------------------------------
     def _refresh_history(self) -> None:
         rumps = self.rumps
         self.history_menu.clear()
@@ -119,7 +177,7 @@ class MenuBarApp:
 
         return callback
 
-    # ------------------------------------------------------------------
+    # --- menu actions -----------------------------------------------------
     def _toggle(self, _sender) -> None:
         self.dictation.toggle()
 
@@ -137,7 +195,7 @@ class MenuBarApp:
         self.cfg = config_module.load()
         self.dictation.cfg = self.cfg
         self._rebuild_modes()
-        self.status_item.title = f"Hold {self.dictation.hotkey_label} to talk"
+        self.status_item.title = self._idle_hint()
         self.rumps.notification("mumbles", "Configuration reloaded", "")
 
     def _about(self, _sender) -> None:
@@ -159,10 +217,11 @@ class MenuBarApp:
         self.dictation.shutdown()
         self.rumps.quit_application()
 
-    # ------------------------------------------------------------------
+    # --- lifecycle --------------------------------------------------------
     def run(self) -> None:
+        import threading
+
         self.dictation.bind_hotkey()
-        self._refresh_history()
 
         def warm():
             try:
@@ -171,6 +230,9 @@ class MenuBarApp:
                 self._on_error(exc)
 
         threading.Thread(target=warm, daemon=True).start()
+
+        self.timer = self.rumps.Timer(self._tick, FRAME_INTERVAL)
+        self.timer.start()
         self.app.run()
 
 

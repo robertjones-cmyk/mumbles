@@ -14,6 +14,27 @@ the transcript, and even that can point at a local Ollama instead.
 
 ## Install
 
+### Download the app
+
+Grab the disk image for your Mac from the
+[latest release](https://github.com/robertjones-cmyk/mumbles/releases/latest):
+
+| Mac | File |
+|---|---|
+| Apple Silicon (M1 and later) | `mumbles-*-macos-arm64.dmg` |
+| Intel | `mumbles-*-macos-x86_64.dmg` |
+
+Open it, drag **mumbles.app** to Applications, and look for the microphone in
+your menu bar. There is no Dock icon and no window — it is a menu bar app.
+
+> **The first launch is different.** These builds are not signed with a paid
+> Apple Developer certificate, so macOS blocks them the first time and may
+> claim the app is "damaged". It isn't. **Right-click mumbles.app → Open →
+> Open.** If macOS still refuses:
+> `xattr -dr com.apple.quarantine /Applications/mumbles.app`. Once only.
+
+### Or install from source
+
 ```bash
 git clone https://github.com/robertjones-cmyk/mumbles.git
 cd mumbles
@@ -22,7 +43,14 @@ cd mumbles
 
 The installer creates a virtualenv, picks the right Whisper backend for your
 Mac (Metal-accelerated `mlx-whisper` on Apple Silicon, `faster-whisper` on
-Intel), links `mumbles` into `~/.local/bin`, and runs the setup check.
+Intel), links `mumbles` into `~/.local/bin`, and runs the setup check. This is
+the route if you want the `mumbles` command line as well as the menu bar.
+
+### Or build the app yourself
+
+```bash
+./packaging/make_dmg.sh    # macOS only; produces dist/mumbles-*.dmg
+```
 
 ### Permissions
 
@@ -48,6 +76,17 @@ mumbles once       # record a single take, no hotkey needed
 
 Default hotkey is **⌘⇧Space**, push-to-talk: hold it, talk, let go. The text is
 pasted where your cursor is. Tap **Esc** mid-take to throw a recording away.
+
+While you are recording, the menu bar shows a live level meter, so you can see
+that the mic is actually picking you up before you find out from an empty
+transcript:
+
+```
+🎙              idle
+🔴 ▁▁▁▁▁▁       recording, hearing nothing - check your input device
+🔴 ███▆▁▁       recording, normal speaking level
+🔴 ██████       too loud, back off the mic
+```
 
 Prefer tap-to-start/tap-to-stop?
 

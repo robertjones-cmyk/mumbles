@@ -1,0 +1,113 @@
+name: build macOS app
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      release:
+        description: "Publish the built disk images as a GitHub release"
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install pytest pyflakes numpy
+      - run: python -m pyflakes mumbles/ tests/ packaging/
+      - run: python -m pytest tests -q
+
+  build:
+    needs: test
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Apple Silicon. mlx-whisper is the Metal-accelerated backend.
+          - runner: macos-14
+            arch: arm64
+            extras: "mlx,ui"
+          # Intel Macs fall back to CTranslate2 on the CPU.
+          - runner: macos-13
+            arch: x86_64
+            extras: "cpu,ui"
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install PortAudio
+        run: brew install portaudio
+
+      - name: Install mumbles and build tooling
+        run: |
+          python -m pip install --upgrade pip wheel
+          python -m pip install ".[${{ matrix.extras }}]"
+          python -m pip install "py2app>=0.28.7"
+
+      - name: Sanity check the import graph
+        run: |
+          python -c "import mumbles, mumbles.menubar, mumbles.meter; print(mumbles.__version__)"
+          python -c "import rumps, pynput, sounddevice, numpy; print('deps ok')"
+
+      - name: Build the app and disk image
+        run: ./packaging/make_dmg.sh
+
+      - name: Verify the bundle
+        run: |
+          test -d dist/mumbles.app
+          /usr/libexec/PlistBuddy -c "Print :LSUIElement" \
+            dist/mumbles.app/Contents/Info.plist
+          /usr/libexec/PlistBuddy -c "Print :NSMicrophoneUsageDescription" \
+            dist/mumbles.app/Contents/Info.plist
+          codesign --verify --verbose dist/mumbles.app
+          ls -lh dist/*.dmg
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mumbles-macos-${{ matrix.arch }}
+          path: dist/*.dmg
+          if-no-files-found: error
+
+  release:
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v') || inputs.release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: artifacts/**/*.dmg
+          tag_name: ${{ github.ref_type == 'tag' && github.ref_name || format('build-{0}', github.run_number) }}
+          name: mumbles ${{ github.ref_type == 'tag' && github.ref_name || format('build {0}', github.run_number) }}
+          generate_release_notes: true
+          body: |
+            Download the disk image for your Mac:
+
+            | Mac | File |
+            |---|---|
+            | Apple Silicon (M1 and later) | `mumbles-*-macos-arm64.dmg` |
+            | Intel | `mumbles-*-macos-x86_64.dmg` |
+
+            Not sure which you have? Apple menu → About This Mac.
+
+            **First launch:** this build is not signed with a paid Apple
+            Developer certificate, so macOS will block it the first time.
+            Right-click mumbles.app → Open → Open. Details are in the
+            "READ ME FIRST" file inside the disk image.
+
+            mumbles is a menu bar app — no Dock icon. Hold ⌘⇧Space, talk,
+            let go.
