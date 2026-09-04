@@ -27,6 +27,18 @@ GLYPHS = {IDLE: "🎙", RECORDING: "🔴", TRANSCRIBING: "✍️"}
 FRAME_INTERVAL = 0.1
 
 
+def _clear_submenu(menu_item) -> None:
+    """Empty a menu item's submenu, tolerating one that has none yet.
+
+    rumps creates the underlying NSMenu lazily on the first add, but
+    Menu.clear() calls removeAllItems() on it unconditionally - so clearing a
+    freshly created MenuItem raises AttributeError on None. Menu subclasses
+    ListDict, so len() answers the question without touching private state.
+    """
+    if len(menu_item):
+        menu_item.clear()
+
+
 def _require_rumps():
     try:
         import rumps
@@ -96,7 +108,7 @@ class MenuBarApp:
 
     def _rebuild_modes(self) -> None:
         rumps = self.rumps
-        self.mode_menu.clear()
+        _clear_submenu(self.mode_menu)
         for name, mode in sorted(self.cfg.resolved_modes().items()):
             label = f"{'✓ ' if name == self.cfg.active_mode else '   '}{name}"
             self.mode_menu.add(
@@ -158,7 +170,7 @@ class MenuBarApp:
     # --- menu contents ---------------------------------------------------
     def _refresh_history(self) -> None:
         rumps = self.rumps
-        self.history_menu.clear()
+        _clear_submenu(self.history_menu)
         entries = self.dictation.history.recent(10)
         if not entries:
             self.history_menu.add(rumps.MenuItem("(nothing yet)", callback=None))

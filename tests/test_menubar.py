@@ -15,16 +15,34 @@ from mumbles.meter import LEVELS
 
 
 class FakeMenuItem:
+    """Mimics rumps.MenuItem, including the part that bites.
+
+    rumps creates a MenuItem's submenu lazily on the first add, but its
+    clear() calls removeAllItems() on that submenu unconditionally. Clearing
+    a MenuItem nothing has been added to therefore raises AttributeError on
+    None, and the app dies at startup. The fake reproduces that rather than
+    quietly tolerating it, which is what let the bug ship.
+    """
+
     def __init__(self, title, callback=None):
         self.title = title
         self.callback = callback
         self.children = []
+        self._menu = None          # no submenu until something is added
 
     def add(self, item):
+        if self._menu is None:
+            self._menu = []
         self.children.append(item)
 
     def clear(self):
+        if self._menu is None:
+            raise AttributeError(
+                "'NoneType' object has no attribute 'removeAllItems'")
         self.children = []
+
+    def __len__(self):
+        return len(self.children)
 
 
 class FakeApp:
@@ -174,6 +192,29 @@ def test_long_history_entries_are_truncated(bar):
     bar._on_result("x" * 200, None)
     bar._tick()
     assert len(bar.history_menu.children[0].title) == 46
+
+
+def test_building_the_menu_does_not_clear_an_empty_submenu(fake_rumps, sandbox):
+    """Regression: the app crashed on launch before showing anything.
+
+    _build_menu created the Mode menu and immediately rebuilt it, clearing a
+    submenu rumps had not created yet.
+    """
+    from mumbles.menubar import MenuBarApp
+
+    MenuBarApp(Config())          # constructing it is the whole test
+
+
+def test_rebuilding_a_populated_menu_still_clears_it(bar):
+    before = [child.title for child in bar.mode_menu.children]
+    bar._rebuild_modes()
+    assert [child.title for child in bar.mode_menu.children] == before
+
+
+def test_switching_mode_moves_the_check_mark(bar):
+    bar._make_mode_callback("email")(None)
+    marked = [c.title for c in bar.mode_menu.children if c.title.startswith("✓")]
+    assert marked == ["✓ email"]
 
 
 def test_mode_menu_marks_the_active_mode(bar):
