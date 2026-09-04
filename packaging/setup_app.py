@@ -32,11 +32,9 @@ ICON = ROOT / "packaging" / "mumbles.icns"
 # Packages py2app cannot discover by following imports, either because we
 # import them lazily on purpose or because they load things at runtime.
 INCLUDES = [
-    "mumbles",
-    "rumps",
-    "pynput",
+    # sounddevice is a single module, not a package, so it belongs here.
     "sounddevice",
-    "numpy",
+    "_sounddevice",
     "sqlite3",
     "urllib.request",
 ]
@@ -59,8 +57,17 @@ def _installed(name: str) -> bool:
         return False
 
 
-PACKAGES = [name for name in ("rumps", "pynput", "sounddevice", "numpy")
-            if _installed(name)]
+# Real packages only: py2app resolves these with imp.find_module, and being
+# listed here also means py2app copies them as directories instead of zipping
+# them - which is what lets a bundled .dylib be dlopen'd at all.
+#
+# _sounddevice_data carries libportaudio.dylib. sounddevice tries the system
+# library first and falls back to this package's __path__, and on a clean Mac
+# with no Homebrew portaudio the fallback is the only path that works. Zipped,
+# the dylib cannot be loaded and audio capture dies at import.
+_REQUIRED_PACKAGES = ("mumbles", "rumps", "pynput", "numpy", "_sounddevice_data")
+
+PACKAGES = [name for name in _REQUIRED_PACKAGES if _installed(name)]
 PACKAGES += [name for name in OPTIONAL_BACKENDS if _installed(name)]
 INCLUDES += [name for name in OPTIONAL_INCLUDES if _installed(name)]
 
