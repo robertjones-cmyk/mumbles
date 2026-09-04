@@ -1,0 +1,37 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "mumbles"
+version = "0.1.0"
+description = "Local, offline voice dictation for macOS. Hold a hotkey, talk, get text in any app."
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "MIT" }
+authors = [{ name = "mumbles contributors" }]
+keywords = ["dictation", "whisper", "speech-to-text", "macos", "voice"]
+
+dependencies = [
+    "sounddevice>=0.4.6",
+    "numpy>=1.24",
+    "pynput>=1.7.6",
+]
+
+[project.optional-dependencies]
+# Apple Silicon: Metal-accelerated Whisper. This is the fast path.
+mlx = ["mlx-whisper>=0.4.0"]
+# Intel Macs / anything else: CPU-friendly CTranslate2 backend.
+cpu = ["faster-whisper>=1.0.0"]
+# Menu bar UI.
+ui = ["rumps>=0.4.0"]
+dev = ["pytest>=7.4"]
+
+[project.scripts]
+mumbles = "mumbles.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["mumbles*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
