@@ -86,8 +86,17 @@ jobs:
 
       - name: Prove the bundled interpreter can import everything
         run: |
-          BIN="$(find dist/mumbles.app/Contents/MacOS -maxdepth 1 -type f -perm -u+x -print -quit)"
-          echo "bundle executable: $BIN"
+          # A py2app bundle ships its own `python` alongside the launcher, so
+          # picking the first executable found runs the interpreter on empty
+          # stdin and exits 0 without testing anything. Ask the Info.plist
+          # which one is the app.
+          EXE="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' \
+                 dist/mumbles.app/Contents/Info.plist)"
+          BIN="dist/mumbles.app/Contents/MacOS/$EXE"
+          if [ ! -x "$BIN" ]; then
+            echo "no launcher at $BIN"; ls -la dist/mumbles.app/Contents/MacOS; exit 1
+          fi
+          echo "bundle launcher: $BIN"
           MUMBLES_SELFTEST=1 "$BIN"
 
       - uses: actions/upload-artifact@v4
