@@ -220,7 +220,11 @@ pip install -e ".[dev]"
 pytest
 ```
 
-The test suite runs anywhere, macOS or not — the OS-specific pieces are stubbed.
+The test suite runs anywhere, macOS or not — every OS-specific import is lazy,
+and `rumps` is stubbed so the menu bar pump is exercised too.
+
+CI runs the tests on every push and builds both architectures on a tag, so a
+release is `git tag v0.1.1 && git push --tags`.
 
 Layout:
 
@@ -230,11 +234,13 @@ Layout:
 | `audio.py` | microphone capture |
 | `transcribe.py` | Whisper backends (mlx / faster-whisper / whisper.cpp) |
 | `postprocess.py` | local text cleanup — pure functions |
+| `meter.py` | the menu bar level meter — pure functions |
 | `llm.py` | optional Anthropic / Ollama rewriting |
 | `inject.py` | clipboard and keystroke delivery |
 | `hotkey.py` | global hotkey state machine |
 | `menubar.py` | the rumps menu bar UI |
 | `cli.py` | command line |
+| `packaging/` | icon, py2app bundle and `.dmg` build |
 
 ## What this isn't
 
