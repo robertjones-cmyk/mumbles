@@ -6,7 +6,8 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 
-VERSION="$(python3 -c 'import sys; sys.path.insert(0, "."); from mumbles import __version__; print(__version__)')"
+PYTHON="${PYTHON:-python3}"
+VERSION="$("$PYTHON" -c 'import sys; sys.path.insert(0, "."); from mumbles import __version__; print(__version__)')"
 ARCH="$(uname -m)"
 DMG_NAME="mumbles-${VERSION}-macos-${ARCH}"
 STAGE="build/dmg"
@@ -19,7 +20,7 @@ if [[ "$(uname -s)" != "Darwin" ]]; then
 fi
 
 say "generating the app icon"
-python3 packaging/make_icon.py build/mumbles.png
+"$PYTHON" packaging/make_icon.py build/mumbles.png
 rm -rf build/mumbles.iconset
 mkdir -p build/mumbles.iconset
 for size in 16 32 128 256 512; do
@@ -31,10 +32,40 @@ done
 iconutil -c icns build/mumbles.iconset -o packaging/mumbles.icns
 say "icon: packaging/mumbles.icns"
 
-if ! PYTHONPATH="$ROOT" python3 -c "import mumbles" 2>/dev/null; then
-  echo "cannot import mumbles; run 'pip install .' in $ROOT first" >&2
-  exit 1
+say "building with $("$PYTHON" -c 'import sys; print(sys.executable)')"
+
+if ! "$PYTHON" -c "import mumbles" 2>/dev/null; then
+  # Allow building straight from a source checkout.
+  export PYTHONPATH="$ROOT${PYTHONPATH:+:$PYTHONPATH}"
 fi
+
+"$PYTHON" - <<'CHECK' || exit 1
+import sys
+
+missing = []
+for module in ("mumbles", "rumps", "pynput", "sounddevice", "numpy", "py2app"):
+    try:
+        __import__(module)
+    except Exception as exc:
+        missing.append(f"{module}: {exc}")
+
+backends = []
+for module in ("mlx_whisper", "faster_whisper"):
+    try:
+        __import__(module)
+        backends.append(module)
+    except Exception:
+        pass
+if not backends:
+    missing.append("no speech backend (mlx-whisper or faster-whisper)")
+
+if missing:
+    print(f"cannot build with {sys.executable}; it is missing:", file=sys.stderr)
+    for item in missing:
+        print(f"  - {item}", file=sys.stderr)
+    sys.exit(1)
+print(f"backends available: {', '.join(backends)}")
+CHECK
 
 say "building mumbles.app (this takes a few minutes)"
 # Build from a staging directory. setuptools reads pyproject.toml from the
@@ -47,7 +78,7 @@ cp packaging/setup_app.py packaging/app_main.py "$STAGE_BUILD/"
 
 (
   cd "$STAGE_BUILD"
-  MUMBLES_SOURCE_ROOT="$ROOT" PYTHONPATH="$ROOT" python3 setup_app.py py2app
+  MUMBLES_SOURCE_ROOT="$ROOT" PYTHONPATH="${PYTHONPATH:-$ROOT}" "$PYTHON" setup_app.py py2app
 )
 
 # py2app names the bundle after the entry script, so find whatever it built

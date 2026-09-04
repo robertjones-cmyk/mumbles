@@ -41,7 +41,13 @@ INCLUDES = [
     "urllib.request",
 ]
 
-OPTIONAL_BACKENDS = ["mlx_whisper", "mlx", "faster_whisper", "ctranslate2"]
+# py2app resolves `packages` names with the deprecated imp module, and
+# imp.find_module cannot resolve mlx: it ships as a namespace-style package
+# split across the mlx and mlx-metal distributions. Listing it here aborts the
+# build outright, so it goes in `includes` instead, where py2app resolves
+# through modulegraph rather than imp.
+OPTIONAL_BACKENDS = ["mlx_whisper", "faster_whisper", "ctranslate2"]
+OPTIONAL_INCLUDES = ["mlx", "mlx.core", "mlx.nn"]
 
 
 def _installed(name: str) -> bool:
@@ -56,6 +62,7 @@ def _installed(name: str) -> bool:
 PACKAGES = [name for name in ("rumps", "pynput", "sounddevice", "numpy")
             if _installed(name)]
 PACKAGES += [name for name in OPTIONAL_BACKENDS if _installed(name)]
+INCLUDES += [name for name in OPTIONAL_INCLUDES if _installed(name)]
 
 PLIST = {
     "CFBundleName": "mumbles",

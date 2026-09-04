@@ -36,10 +36,12 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # Apple Silicon. mlx-whisper is the Metal-accelerated backend.
+          # Apple Silicon. mlx-whisper is the Metal-accelerated backend; the
+          # CPU backend rides along so the bundle still works if mlx cannot be
+          # packaged, which the selftest below will tell us either way.
           - runner: macos-14
             arch: arm64
-            extras: "mlx,ui"
+            extras: "mlx,cpu,ui"
           # Intel Macs fall back to CTranslate2 on the CPU.
           - runner: macos-13
             arch: x86_64
