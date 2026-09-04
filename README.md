@@ -27,11 +27,21 @@ Grab the disk image for your Mac from the
 Open it, drag **mumbles.app** to Applications, and look for the microphone in
 your menu bar. There is no Dock icon and no window — it is a menu bar app.
 
-> **The first launch is different.** These builds are not signed with a paid
-> Apple Developer certificate, so macOS blocks them the first time and may
-> claim the app is "damaged". It isn't. **Right-click mumbles.app → Open →
-> Open.** If macOS still refuses:
-> `xattr -dr com.apple.quarantine /Applications/mumbles.app`. Once only.
+> **The first launch is different.** These builds are not notarized by Apple
+> — that needs a paid Developer account — so macOS blocks them with "could
+> not verify this app is free of malware". Apple never inspected it, rather
+> than inspected it and objected. The fix, once:
+>
+> ```bash
+> xattr -dr com.apple.quarantine /Applications/mumbles.app
+> ```
+>
+> Or: **System Settings → Privacy & Security → Security → Open Anyway**.
+>
+> Right-clicking and choosing Open used to work and no longer does — Apple
+> removed that bypass in macOS 15 Sequoia. If you would rather not bypass
+> Gatekeeper at all, use the one-line install below instead: a Python
+> package is not a signed app bundle, so none of this applies to it.
 
 ### Or install with one command
 

@@ -136,18 +136,31 @@ mumbles - local voice dictation
 
 1. Drag mumbles.app onto the Applications folder shown here.
 
-2. THE FIRST LAUNCH IS DIFFERENT. This app is not signed with a paid Apple
-   Developer certificate, so macOS will refuse to open it normally and may
-   say it is "damaged". It is not. To get past this:
+2. THE FIRST LAUNCH IS DIFFERENT. This app is not notarized by Apple - that
+   needs a paid Developer account - so macOS blocks it and says it "could
+   not verify" the app is free of malware. Apple did not inspect it and
+   find something; Apple never inspected it at all.
 
-       Right-click mumbles.app in Applications, choose Open,
-       then click Open in the dialog.
-
-   If macOS still refuses, open Terminal and run:
+   The reliable fix, in Terminal, on any macOS version:
 
        xattr -dr com.apple.quarantine /Applications/mumbles.app
 
+   Or without Terminal, on macOS 13 and later:
+
+       System Settings > Privacy & Security > scroll to Security >
+       "mumbles was blocked..." > Open Anyway, then authenticate.
+
    You only have to do this once.
+
+   Note: right-clicking the app and choosing Open USED to work, and no
+   longer does. Apple removed that bypass in macOS 15 Sequoia.
+
+   If you would rather not bypass Gatekeeper at all, install from source
+   instead - a Python package is not a signed app bundle, so none of this
+   applies:
+
+       curl -fsSL https://raw.githubusercontent.com/robertjones-cmyk/\
+mumbles/main/install.sh | bash
 
 3. mumbles lives in the menu bar - look for the microphone icon. There is no
    Dock icon and no window.

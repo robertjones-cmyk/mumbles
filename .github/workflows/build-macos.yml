@@ -148,9 +148,18 @@ jobs:
 
             Not sure which you have? Apple menu → About This Mac.
 
-            **First launch:** this build is not signed with a paid Apple
-            Developer certificate, so macOS will block it the first time.
-            Right-click mumbles.app → Open → Open. Details are in the
+            **First launch:** this build is not notarized by Apple (that
+            needs a paid Developer account), so macOS blocks it and says it
+            "could not verify" the app. Apple never inspected it, rather
+            than inspected it and objected. To get past it:
+
+            ```
+            xattr -dr com.apple.quarantine /Applications/mumbles.app
+            ```
+
+            Or: System Settings → Privacy & Security → Security →
+            "Open Anyway". Right-click → Open no longer works; Apple
+            removed that bypass in macOS 15. Details are in the
             "READ ME FIRST" file inside the disk image.
 
             mumbles is a menu bar app — no Dock icon. Hold ⌘⇧Space, talk,
