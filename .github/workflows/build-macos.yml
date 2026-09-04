@@ -79,6 +79,10 @@ jobs:
           codesign --verify --verbose dist/mumbles.app
           ls -lh dist/*.dmg
 
+      - name: Prove the bundled interpreter can import everything
+        run: |
+          MUMBLES_SELFTEST=1 dist/mumbles.app/Contents/MacOS/mumbles
+
       - uses: actions/upload-artifact@v4
         with:
           name: mumbles-macos-${{ matrix.arch }}

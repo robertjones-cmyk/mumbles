@@ -90,5 +90,4 @@ setup(
     version=__version__,
     app=[str(ROOT / "packaging" / "app_main.py")],
     options=OPTIONS,
-    setup_requires=["py2app"],
 )
