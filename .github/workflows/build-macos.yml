@@ -61,7 +61,10 @@ jobs:
         run: |
           python -m pip install --upgrade pip wheel
           python -m pip install ".[${{ matrix.extras }}]"
-          python -m pip install "py2app>=0.28.7"
+          # Pin last: torch pulls in a newer setuptools, and py2app cannot
+          # build against setuptools 80+ (its spawn() dropped verbose=).
+          python -m pip install "setuptools>=77,<80" "py2app>=0.28.7"
+          python -c "import setuptools, py2app; print('setuptools', setuptools.__version__)"
 
       - name: Sanity check the import graph
         run: |

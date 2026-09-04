@@ -59,6 +59,27 @@ for module in ("mlx_whisper", "faster_whisper"):
 if not backends:
     missing.append("no speech backend (mlx-whisper or faster-whisper)")
 
+# py2app calls distutils' spawn() with verbose=. setuptools 80 dropped that
+# parameter and forwards unknown keywords straight to Popen, so the build dies
+# late with "Popen.__init__() got an unexpected keyword argument 'verbose'".
+# Test the signature rather than the version number: it is the actual
+# incompatibility, and it will keep being right when the versions move.
+try:
+    import inspect
+
+    from setuptools._distutils import spawn as _spawn
+
+    if "verbose" not in inspect.signature(_spawn.spawn).parameters:
+        import setuptools
+
+        missing.append(
+            f"setuptools {setuptools.__version__} is incompatible with py2app "
+            "(its spawn() no longer takes verbose=). "
+            "Install a compatible one: pip install 'setuptools>=77,<80'"
+        )
+except ImportError:
+    pass
+
 if missing:
     print(f"cannot build with {sys.executable}; it is missing:", file=sys.stderr)
     for item in missing:
